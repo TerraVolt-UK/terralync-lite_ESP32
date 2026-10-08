@@ -57,12 +57,33 @@ jobs:
 
       - name: Stage release binaries into firmware/
         run: |
-          gh release download "${{ steps.rel.outputs.fw_tag }}" \
-            --pattern "terralync-*.bin" --dir firmware --clobber
-          gh release download "${{ steps.rel.outputs.app_tag }}" \
-            --pattern "terralync-lite-fs-*.bin" --dir firmware --clobber
-          # OTA app images + release manifest aren't used by the web flasher
-          rm -f firmware/*-app.bin firmware/manifest.json
+          # The monorepo creates the release BEFORE uploading assets
+          # (release:published fires at create time) — wait for the full
+          # expected set, not just "something downloaded".
+          fw_expected=(terralync-s3-8mb.bin terralync-s3-16mb.bin \
+                       terralync-geek-16mb.bin terralync-guition-16mb.bin)
+          fs_expected=(terralync-lite-fs-*-8mb.bin terralync-lite-fs-*-16mb.bin \
+                       terralync-lite-fs-*-guition-16mb.bin)
+          ok=0
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            gh release download "${{ steps.rel.outputs.fw_tag }}" \
+              --pattern "terralync-*.bin" --dir firmware --clobber || true
+            gh release download "${{ steps.rel.outputs.app_tag }}" \
+              --pattern "terralync-lite-fs-*.bin" --dir firmware --clobber || true
+            # OTA app images + release manifest aren't used by the web flasher
+            rm -f firmware/*-app.bin firmware/manifest.json
+            ok=1
+            for f in "${fw_expected[@]}"; do
+              [ -f "firmware/$f" ] || { echo "missing firmware/$f"; ok=0; }
+            done
+            for pat in "${fs_expected[@]}"; do
+              compgen -G "firmware/$pat" > /dev/null || { echo "missing $pat"; ok=0; }
+            done
+            [ "$ok" = 1 ] && break
+            echo "Attempt $attempt: release assets still uploading — retrying in 30 s"
+            sleep 30
+          done
+          [ "$ok" = 1 ] || { echo "::error::Timed out waiting for release assets"; exit 1; }
           ls -la firmware/
 
       - name: Regenerate asset manifest
