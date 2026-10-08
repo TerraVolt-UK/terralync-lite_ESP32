@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Flash TerraLync Lite to your ESP32-S3 directly from Chrome or Edge — no installs, no drivers to hunt down.">
+    <title>Web Flasher (Beta) — TerraLync</title>
+
+    <link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="images/favicon-16x16.png">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <script>
+        // Theme init before first paint (avoids dark->light flash)
+        (function () {
+            var t = 'dark';
+            try { t = localStorage.getItem('tl-theme') || 'dark'; } catch (e) {}
+            document.documentElement.setAttribute('data-theme', t);
+        })();
+    </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <link rel="stylesheet" href="styles.css">
+
+    <style>
+        /* ----- Web-flasher specific bits (design-system classes live in styles.css) ----- */
+        .beta-banner {
+            display: flex; align-items: center; gap: 0.75rem;
+            background: linear-gradient(90deg, rgba(245,158,11,0.14), rgba(245,158,11,0.04));
+            border: 1px solid rgba(245,158,11,0.4);
+            border-radius: 12px; padding: 0.8rem 1.1rem;
+            font-size: 0.92rem; color: var(--text-2);
+        }
+        .beta-banner i { color: var(--amber); font-size: 1.1rem; }
+        .beta-banner .tag { flex-shrink: 0; }
+
+        .steps { display: flex; gap: 1rem; margin: 1.5rem 0 2rem; flex-wrap: wrap; }
+        .step-chip {
+            display: flex; align-items: center; gap: 0.55rem;
+            padding: 0.45rem 1rem; border-radius: 999px;
+            border: 1px solid var(--border); background: var(--glass);
+            font-size: 0.85rem; color: var(--text-3); font-weight: 500;
+            transition: border-color .25s, color .25s;
+        }
+        .step-chip .n {
+            width: 1.35rem; height: 1.35rem; border-radius: 50%;
+            display: inline-flex; align-items: center; justify-content: center;
+            background: var(--glass-strong); font-size: 0.75rem; font-weight: 700;
+        }
+        .step-chip.active { border-color: var(--emerald); color: var(--text-1); }
+        .step-chip.active .n { background: var(--emerald); color: #052018; }
+        .step-chip.done { border-color: rgba(16,185,129,0.4); color: var(--emerald-bright); }
+        .step-chip.done .n { background: rgba(16,185,129,0.2); color: var(--emerald-bright); }
+
+        .detect-card { display: none; }
+        .detect-card.show { display: block; }
+        .probe-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 0.6rem; margin: 1rem 0;
+        }
+        .probe-cell {
+            background: var(--glass); border: 1px solid var(--border);
+            border-radius: 10px; padding: 0.7rem 0.9rem;
+        }
+        .probe-cell .k { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); }
+        .probe-cell .v { font-size: 0.98rem; font-weight: 600; color: var(--text-1); margin-top: 0.15rem; }
+
+        .progress-wrap { margin: 1rem 0; }
+        .progress-label { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--text-2); margin-bottom: 0.35rem; }
+        .progress-track { height: 10px; border-radius: 999px; background: var(--glass-strong); overflow: hidden; border: 1px solid var(--border); }
+        .progress-fill { height: 100%; width: 0%; border-radius: 999px;
+            background: linear-gradient(90deg, var(--emerald), var(--emerald-bright)); transition: width .15s ease-out; }
+        /* indeterminate sweep while the chip erases (like the .exe's moving block) */
+        .progress-fill.indeterminate {
+            width: 30% !important;
+            animation: erase-sweep 1.1s ease-in-out infinite;
+            background: linear-gradient(90deg, var(--amber), #FBBF24);
+        }
+        @keyframes erase-sweep {
+            0%   { transform: translateX(-100%); }
+            100% { transform: translateX(400%); }
+        }
+
+        .log-console {
+            font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; line-height: 1.55;
+            background: var(--code-bg); color: var(--code-text);
+            border: 1px solid var(--border); border-radius: 12px;
+            padding: 0.9rem 1rem; height: 220px; overflow-y: auto;
+            white-space: pre-wrap; word-break: break-word;
+        }
+        .log-console .lg-ok { color: var(--emerald-bright); }
+        .log-console .lg-err { color: var(--red); }
+        .log-console .lg-warn { color: var(--amber); }
+        .log-console .lg-dim { color: var(--text-3); }
+
+        /* Board line-art: white-bg images invert to chalk-on-slate in dark mode */
+        .board-art {
+            display: block; max-width: 200px; max-height: 140px; width: auto; height: auto;
+            border-radius: 10px; object-fit: contain;
+        }
+        [data-theme="dark"] .board-art { filter: invert(1); opacity: 0.92; }
+        [data-theme="light"] .board-art { border: 1px solid var(--border); background: #fff; padding: 4px; }
+        .detect-row { display: flex; gap: 1.1rem; align-items: center; flex-wrap: wrap; }
+
+        .btn[disabled] { opacity: 0.45; cursor: not-allowed; pointer-events: none; }
+        .tier-select {
+            background: var(--bg-2); color: var(--text-1);
+            border: 1px solid var(--border); border-radius: 8px;
+            padding: 0.45rem 0.7rem; font-family: 'Inter', sans-serif; font-size: 0.88rem;
+        }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <div class="aurora-bg">
+        <div class="aurora-orb o1"></div>
+        <div class="aurora-orb o2"></div>
+        <div class="aurora-orb o3"></div>
+    </div>
+    <div class="grid-overlay"></div>
+
+    <!-- ===================== NAV ===================== -->
+    <nav class="navbar scrolled">
+        <div class="navbar-inner">
+            <a href="https://terralync.terravolt.co.uk/" class="navbar-logo">
+                <img src="images/Logo-No_BG.png" alt="TerraLync">
+                <span>Terra<span class="logo-dot">Lync</span></span>
+            </a>
+            <div class="navbar-links" id="navbar-links">
+                <a href="https://terralync.terravolt.co.uk/" class="navbar-link">Home</a>
+                <a href="https://terralync.terravolt.co.uk/pages/downloads.html" class="navbar-link">Downloads</a>
+                <a href="https://terralync.terravolt.co.uk/pages/help.html" class="navbar-link">Docs</a>
+            </div>
+            <div class="navbar-actions">
+                <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme"></button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- ===================== PAGE HERO ===================== -->
+    <header class="page-hero">
+        <div class="hero-media">
+            <img src="images/heroes/circuit.jpg" alt="" aria-hidden="true">
+        </div>
+        <div class="hero-inner">
+            <span class="eyebrow"><i class="fas fa-bolt"></i> Web flasher &nbsp;<span class="tag" style="vertical-align:middle;"><i class="fas fa-flask"></i> Beta</span></span>
+            <h1>Flash <span class="text-gradient">TerraLync Lite</span><br>straight from your browser</h1>
+            <p class="hero-subtitle">
+                Plug in your ESP32-S3, click connect — we detect the board, pick the right
+                firmware and write it. Nothing to install.
+            </p>
+        </div>
+    </header>
+
+    <!-- ===================== FLASHER ===================== -->
+    <section class="section-sm" id="flasher">
+        <div class="container-narrow">
+
+            <div class="beta-banner reveal">
+                <span class="tag"><i class="fas fa-flask"></i> Beta</span>
+                <span>This is a new, experimental install route. If anything misbehaves, use the
+                <a href="https://terralync.terravolt.co.uk/pages/downloads.html">Windows flasher</a>
+                and let us know what happened.</span>
+            </div>
+
+            <div id="unsupported" class="callout warn reveal hidden" style="margin-top:1rem;">
+                <i class="fas fa-triangle-exclamation"></i>
+                <p><strong>This browser can't flash devices.</strong> Web flashing needs the
+                Web&nbsp;Serial API — use <strong>Chrome</strong>, <strong>Edge</strong>, Brave or Opera
+                on Windows, macOS, Linux or ChromeOS. Safari and Firefox aren't supported.
+                On any other browser, use the
+                <a href="https://terralync.terravolt.co.uk/pages/downloads.html">Windows flasher</a>.</p>
+            </div>
+
+            <div class="steps">
+                <div class="step-chip" id="step-1"><span class="n">1</span> Connect &amp; detect</div>
+                <div class="step-chip" id="step-2"><span class="n">2</span> Flash firmware</div>
+                <div class="step-chip" id="step-3"><span class="n">3</span> Power on &amp; set up</div>
+            </div>
+
+            <!-- Step 1: connect -->
+            <div class="glass-card" id="card-connect">
+                <h3><i class="fas fa-usb" style="color:var(--emerald-bright); margin-right:0.5rem;"></i>Connect your board</h3>
+                <p style="font-size:0.95rem;">
+                    Use a data-capable USB cable. <strong>ESP32-S3-GEEK:</strong> if the board is already
+                    running TerraLync (shows as a USB serial device), unplug it, hold <strong>BOOT</strong>,
+                    reconnect, and release BOOT — it will reappear as an Espressif USB device.
+                </p>
+                <div style="display:flex; gap:0.75rem; align-items:center; flex-wrap:wrap; margin-top:0.5rem;">
+                    <button class="btn btn-primary" id="btn-connect"><i class="fas fa-plug"></i> Connect device</button>
+                    <span id="connect-status" style="font-size:0.9rem; color:var(--text-3);">Waiting for a device…</span>
+                </div>
+            </div>
+
+            <!-- Step 1 result -->
+            <div class="glass-card detect-card" id="card-detect" style="margin-top:1rem;">
+                <h3 id="detect-title"><i class="fas fa-microchip" style="color:var(--emerald-bright); margin-right:0.5rem;"></i>Detected hardware</h3>
+                <div class="probe-grid">
+                    <div class="probe-cell"><div class="k">Chip</div><div class="v" id="p-chip">—</div></div>
+                    <div class="probe-cell"><div class="k">Flash size</div><div class="v" id="p-flash">—</div></div>
+                    <div class="probe-cell"><div class="k">PSRAM</div><div class="v" id="p-psram">—</div></div>
+                    <div class="probe-cell"><div class="k">USB</div><div class="v" id="p-usb">—</div></div>
+                    <div class="probe-cell"><div class="k">MAC</div><div class="v" id="p-mac">—</div></div>
+                </div>
+                <div id="gate-ok" class="callout hidden" style="border-color:rgba(16,185,129,0.4); background:rgba(16,185,129,0.08);">
+                    <div class="detect-row">
+                        <img class="board-art hidden" id="board-img" src="" alt="Detected board">
+                        <div>
+                            <i class="fas fa-circle-check" style="color:var(--emerald-bright);"></i>
+                            <strong>Board detected:</strong> <span id="detected-board"></span>
+                            <p style="margin:0.3rem 0 0; font-size:0.88rem; color:var(--text-3);">Doesn't look like yours? Pick the right one under Advanced below.</p>
+                        </div>
+                    </div>
+                </div>
+                <div id="gate-bad" class="callout warn hidden">
+                    <i class="fas fa-triangle-exclamation"></i>
+                    <p id="gate-bad-msg"><strong>Incompatible hardware.</strong></p>
+                </div>
+            </div>
+
+            <!-- Step 2: install -->
+            <div class="glass-card detect-card" id="card-install" style="margin-top:1rem;">
+                <h3><i class="fas fa-cloud-arrow-down" style="color:var(--emerald-bright); margin-right:0.5rem;"></i>Install TerraLync Lite</h3>
+                <p style="font-size:0.95rem; margin-bottom:0.25rem;" id="install-summary">
+                    Firmware <span id="fw-ver"></span> + app image <span id="app-ver"></span> —
+                    verified against published SHA-256 hashes before writing.
+                </p>
+                <details style="margin:0.5rem 0 0.9rem;">
+                    <summary style="cursor:pointer; font-size:0.85rem; color:var(--text-3);">Advanced</summary>
+                    <div style="display:flex; gap:1rem; align-items:center; flex-wrap:wrap; margin-top:0.6rem;">
+                        <label style="font-size:0.85rem; color:var(--text-2);">Board tier
+                            <select class="tier-select" id="sel-tier">
+                                <option value="auto">Auto-detected</option>
+                                <option value="8mb">Generic 8 MB</option>
+                                <option value="16mb">Generic 16 MB</option>
+                                <option value="geek-16mb">GEEK 16 MB</option>
+                                <option value="guition-16mb">Guition 16 MB</option>
+                            </select>
+                        </label>
+                        <label style="font-size:0.85rem; color:var(--text-2);">Baud
+                            <select class="tier-select" id="sel-baud">
+                                <option value="460800">460800 (fast)</option>
+                                <option value="115200">115200 (safe)</option>
+                            </select>
+                        </label>
+                        <label style="font-size:0.85rem; color:var(--text-2); display:flex; align-items:center; gap:0.4rem;">
+                            <input type="checkbox" id="chk-app-only">
+                            App filesystem only (keeps firmware &amp; settings)
+                        </label>
+                    </div>
+                </details>
+                <div style="display:flex; gap:0.75rem; align-items:center; flex-wrap:wrap;">
+                    <button class="btn btn-primary" id="btn-flash"><i class="fas fa-bolt"></i> Flash TerraLync Lite</button>
+                    <span id="flash-status" style="font-size:0.9rem; color:var(--text-3);"></span>
+                </div>
+                <div class="progress-wrap">
+                    <div class="progress-label"><span id="prog-label">Idle</span><span id="prog-pct"></span></div>
+                    <div class="progress-track"><div class="progress-fill" id="prog-fill"></div></div>
+                </div>
+            </div>
+
+            <!-- Step 3: done -->
+            <div class="glass-card detect-card" id="card-done" style="margin-top:1rem;">
+                <h3><i class="fas fa-circle-check" style="color:var(--emerald-bright); margin-right:0.5rem;"></i>Flashed — now power it up</h3>
+                <ol style="font-size:0.95rem; line-height:1.8; margin:0.5rem 0 0 1.2rem; padding:0;">
+                    <li id="done-power">Unplug the USB cable and plug it back in to reboot into TerraLync Lite.</li>
+                    <li>On your phone or laptop, join the <code>TerraLync-Setup</code> Wi-Fi network (open — no password).</li>
+                    <li>The setup page should pop up automatically. If not, open <code>http://192.168.4.1/config</code>.</li>
+                    <li>After Wi-Fi is configured, reach the dashboard at <code>http://terralync.local</code>.</li>
+                </ol>
+            </div>
+
+            <!-- Troubleshooting -->
+            <div class="glass-card" style="margin-top:1rem;">
+                <details>
+                    <summary style="cursor:pointer; font-weight:600;"><i class="fas fa-life-ring" style="color:var(--emerald-bright); margin-right:0.5rem;"></i>No device showing up, or flash failing?</summary>
+                    <div style="margin-top:1rem; font-size:0.9rem; line-height:1.7;">
+                        <p style="margin-bottom:0.75rem;"><strong><i class="fas fa-plug" style="color:var(--emerald-bright); margin-right:0.4rem;"></i>Board not in the picker?</strong>
+                            Check the USB cable first — a charge-only cable powers the board but never enumerates.
+                            <strong>ESP32-S3-GEEK running TerraLync already?</strong> Its app-mode USB can't be flashed — unplug,
+                            hold <strong>BOOT</strong>, reconnect, release BOOT: it reappears as an "Espressif" device.</p>
+                        <p style="margin-bottom:0.75rem;"><strong><i class="fas fa-desktop" style="color:var(--emerald-bright); margin-right:0.4rem;"></i>Drivers.</strong>
+                            Boards connected via their native USB-C port (Espressif device) need no driver on Windows&nbsp;10/11,
+                            macOS, Linux or ChromeOS. Boards with a CH340 chip (the Guition display) work out of the box on
+                            Windows and modern macOS — older macOS may need the free
+                            <a href="https://www.wch.cn/downloads/CH34XSER_MAC_ZIP.html" target="_blank" rel="noopener">WCH CH34x driver</a>.
+                            On Linux, add yourself to the <code>dialout</code> group (<code>sudo usermod -aG dialout $USER</code>,
+                            then sign out and back in) or Chrome can't open the port.</p>
+                        <p style="margin-bottom:0.75rem;"><strong><i class="fas fa-lock" style="color:var(--emerald-bright); margin-right:0.4rem;"></i>Port in use?</strong>
+                            Only one program can hold a serial port — close Arduino Serial Monitor, PuTTY, or any other
+                            browser tab connected to the device, then Connect again.</p>
+                        <p style="margin-bottom:0.75rem;"><strong><i class="fas fa-gauge-simple" style="color:var(--emerald-bright); margin-right:0.4rem;"></i>Flash failing part-way?</strong>
+                            Under <em>Advanced</em>, set Baud to <strong>115200 (safe)</strong> and retry. If it still fails,
+                            copy the log below and send it to us.</p>
+                        <p style="margin:0;"><strong><i class="fas fa-download" style="color:var(--emerald-bright); margin-right:0.4rem;"></i>Still stuck?</strong>
+                            The <a href="https://terralync.terravolt.co.uk/pages/downloads.html">Windows flasher (.exe)</a>
+                            is the fully-tested path — or check the
+                            <a href="https://terralync.terravolt.co.uk/pages/help.html">install guide</a>.</p>
+                    </div>
+                </details>
+            </div>
+
+            <!-- Log -->
+            <div class="glass-card" style="margin-top:1rem;">
+                <h3 style="font-size:1rem;"><i class="fas fa-terminal" style="color:var(--emerald-bright); margin-right:0.5rem;"></i>Log</h3>
+                <div class="log-console" id="log"></div>
+            </div>
+
+        </div>
+    </section>
+
+    <!-- ===================== FOOTER ===================== -->
+    <footer>
+        <div class="container">
+            <div class="footer-bottom" style="justify-content:center; text-align:center;">
+                <span>&copy; 2026 TerraLync — a TerraVolt UK product. Web flasher is beta; firmware served from GitHub Releases.</span>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Theme toggle + reveal-on-scroll (minimal main.js equivalents)
+        (function () {
+            function theme() {
+                return document.documentElement.getAttribute('data-theme') || 'dark';
+            }
+            function paintThemeIcon() {
+                var btn = document.getElementById('theme-toggle');
+                if (!btn) return;
+                var dark = theme() === 'dark';
+                btn.innerHTML = dark ? '<i class="fas fa-moon"></i>' : '<i class="fas fa-sun"></i>';
+                btn.setAttribute('aria-label', dark ? 'Switch to light theme' : 'Switch to dark theme');
+            }
+            paintThemeIcon();
+            var btn = document.getElementById('theme-toggle');
+            if (btn) btn.addEventListener('click', function () {
+                var next = theme() === 'dark' ? 'light' : 'dark';
+                document.documentElement.setAttribute('data-theme', next);
+                try { localStorage.setItem('tl-theme', next); } catch (e) {}
+                paintThemeIcon();
+            });
+            if ('IntersectionObserver' in window) {
+                var io = new IntersectionObserver(function (entries) {
+                    entries.forEach(function (e) {
+                        if (e.isIntersecting) { e.target.classList.add('visible'); io.unobserve(e.target); }
+                    });
+                }, { threshold: 0.1 });
+                document.querySelectorAll('.reveal').forEach(function (el) { io.observe(el); });
+            } else {
+                document.querySelectorAll('.reveal').forEach(function (el) { el.classList.add('visible'); });
+            }
+        })();
+    </script>
+    <script type="module" src="flasher.js"></script>
+</body>
+</html>

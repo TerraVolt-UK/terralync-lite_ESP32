@@ -1,0 +1,67 @@
+{
+  "firmware_version": "2.6.3",
+  "app_version": "2.6.5",
+  "channel": "stable",
+  "tiers": {
+    "8mb": {
+      "label": "Generic ESP32-S3 \u2014 8 MB",
+      "firmware": {
+        "file": "firmware/terralync-s3-8mb.bin",
+        "sha256": "29ea47c8e0ab011b2c16b2b7254edd82656f76d9d6898dfc75d8f7b7043bc78e",
+        "size": 1528464,
+        "offset": "0x0"
+      },
+      "fs": {
+        "file": "firmware/terralync-lite-fs-2.6.5-8mb.bin",
+        "sha256": "9f8fd1e7abfb4f00f2bb26658f37db17c23962c2fc6517238f8b6fc8e5b50d0e",
+        "size": 1966080,
+        "offset": "0x420000"
+      }
+    },
+    "16mb": {
+      "label": "Generic ESP32-S3 \u2014 16 MB",
+      "firmware": {
+        "file": "firmware/terralync-s3-16mb.bin",
+        "sha256": "08be900b574455da2d4418116ebb3ab75ccc21c4fe4640603d6a548798afc89b",
+        "size": 1518176,
+        "offset": "0x0"
+      },
+      "fs": {
+        "file": "firmware/terralync-lite-fs-2.6.5-16mb.bin",
+        "sha256": "027e77435d7c381dac3acd3a4759c5edad03d197ead8a409dd74d532b394dde2",
+        "size": 10354688,
+        "offset": "0x620000"
+      }
+    },
+    "geek-16mb": {
+      "label": "Waveshare ESP32-S3-GEEK \u2014 16 MB",
+      "firmware": {
+        "file": "firmware/terralync-geek-16mb.bin",
+        "sha256": "db77c5d065ae3140695415929ba6fccf13d464fe5d52557f02aede0a77bd8d82",
+        "size": 1528352,
+        "offset": "0x0"
+      },
+      "fs": {
+        "file": "firmware/terralync-lite-fs-2.6.5-16mb.bin",
+        "sha256": "027e77435d7c381dac3acd3a4759c5edad03d197ead8a409dd74d532b394dde2",
+        "size": 10354688,
+        "offset": "0x620000"
+      }
+    },
+    "guition-16mb": {
+      "label": "Guition ESP32-4848S040 \u2014 16 MB",
+      "firmware": {
+        "file": "firmware/terralync-guition-16mb.bin",
+        "sha256": "74d447067e7af92e9822c33c672a01ae3fd8a7a8074fe3a4434c8bbff5a3cb3e",
+        "size": 2937984,
+        "offset": "0x0"
+      },
+      "fs": {
+        "file": "firmware/terralync-lite-fs-2.6.5-guition-16mb.bin",
+        "sha256": "ef4f6264d42b6567c7607844b82bfc60385b9f82c70feac1cd70c80e2eafcde3",
+        "size": 10354688,
+        "offset": "0x620000"
+      }
+    }
+  }
+}
