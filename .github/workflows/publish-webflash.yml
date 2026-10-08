@@ -1,0 +1,81 @@
+name: Publish web flasher
+
+# Keeps the GitHub Pages web flasher in sync with this repo's own releases.
+# Fires whenever a release is published here (the monorepo release workflows
+# push firmware-v*/app-v* tags + assets to this repo), or manually via
+# Actions → "Publish web flasher" → Run workflow.
+#
+# The gh-pages branch serves https://terravolt-uk.github.io/terralync-lite_ESP32/
+# — the flasher page + binaries are same-origin, which is what makes the
+# browser fetches work without CORS.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: webflash-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+
+      - name: Resolve latest stable releases
+        id: rel
+        run: |
+          # Stable tags are plain semver — dev/beta/test suffixes are excluded,
+          # matching the desktop flasher's release selection.
+          FW_TAG=$(gh release list --limit 50 --json tagName \
+            --jq '[.[].tagName | select(test("^firmware-v[0-9.]+$"))][0]')
+          APP_TAG=$(gh release list --limit 50 --json tagName \
+            --jq '[.[].tagName | select(test("^app-v[0-9.]+$"))][0]')
+          if [ -z "$FW_TAG" ] || [ -z "$APP_TAG" ]; then
+            echo "::error::Could not resolve stable firmware/app releases"
+            exit 1
+          fi
+          {
+            echo "fw_tag=$FW_TAG"
+            echo "app_tag=$APP_TAG"
+            echo "fw=${FW_TAG#firmware-v}"
+            echo "app=${APP_TAG#app-v}"
+          } >> "$GITHUB_OUTPUT"
+          echo "::notice::Firmware $FW_TAG / App $APP_TAG"
+
+      - name: Stage release binaries into firmware/
+        run: |
+          gh release download "${{ steps.rel.outputs.fw_tag }}" \
+            --pattern "terralync-*.bin" --dir firmware --clobber
+          gh release download "${{ steps.rel.outputs.app_tag }}" \
+            --pattern "terralync-lite-fs-*.bin" --dir firmware --clobber
+          # OTA app images + release manifest aren't used by the web flasher
+          rm -f firmware/*-app.bin firmware/manifest.json
+          ls -la firmware/
+
+      - name: Regenerate asset manifest
+        run: |
+          python make_assets.py \
+            --firmware-version "${{ steps.rel.outputs.fw }}" \
+            --app-version "${{ steps.rel.outputs.app }}"
+
+      - name: Commit and push to gh-pages
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes — flasher already in sync"
+          else
+            git commit -m "webflasher: ${{ steps.rel.outputs.fw_tag }} + ${{ steps.rel.outputs.app_tag }}"
+            git push
+          fi
