@@ -256,6 +256,7 @@ async function probeAndGate(thePort) {
 
 async function onConnectClick() {
     if (busy) return;
+    flashedDone = false;                    // explicit Connect = intent to flash again
     ui.btnConnect.disabled = true;
     ui.connectStatus.textContent = 'Choose your device in the picker…';
     let picked;
@@ -274,6 +275,10 @@ async function onConnectClick() {
 // ---- Flash ------------------------------------------------------------------
 // Connected baud the live loader was opened at (probe + any retry).
 let connectedBaud = 0;
+// Set after a successful flash — suppresses the auto-reprobe on 'connect',
+// so a board resetting into the app (or a replug) isn't mistaken for a new
+// bootloader device.
+let flashedDone = false;
 // Progress-bar phases: 0-10 downloads/erase, 10-92 writes, 92-100 verify+reset.
 const WRITE_PCT_START = 10, WRITE_PCT_END = 92;
 
@@ -372,12 +377,15 @@ async function doFlash() {
         await teardownLoader();
         setProgress('Done', 100);
 
+        flashedDone = true;
         ui.donePower.textContent = tier === 'geek-16mb'
             ? 'Unplug the USB cable and plug it back in — the ESP32-S3-GEEK has no reset button, a power cycle is required.'
-            : 'Press the reset (EN/RST) button on the board — or unplug the USB cable and plug it back in.';
+            : 'The board was reset automatically — give it ~10 seconds to boot. (If nothing appears after ~20 s, unplug it and plug it back in.)';
         ui.cardDone.classList.add('show');
         setStep(3);
-        ui.flashStatus.textContent = 'Done — power-cycle the board.';
+        ui.flashStatus.textContent = tier === 'geek-16mb'
+            ? 'Done — power-cycle the board.'
+            : 'Done — board is rebooting.';
         logOk('Reboot ' + (BOARD_LABELS[tier] || tier) + ' into TerraLync Lite.');
     } catch (e) {
         logErr('Flash failed: ' + friendlyError(e));
@@ -426,7 +434,7 @@ const hex4 = (n) => n == null ? '—' : n.toString(16).toUpperCase().padStart(4,
     // A previously-granted device plugging in (e.g. a GEEK replugged in boot
     // mode after we asked for it once) gets probed automatically.
     navigator.serial.addEventListener('connect', async (e) => {
-        if (busy || loader) return;
+        if (busy || loader || flashedDone) return;
         const info = (e.target.getInfo && e.target.getInfo()) || {};
         if (info.usbVendorId === GEEK_RUNTIME_VID) return;
         logDim('Device plugged in — probing…');
@@ -435,7 +443,7 @@ const hex4 = (n) => n == null ? '—' : n.toString(16).toUpperCase().padStart(4,
         finally { busy = false; ui.btnConnect.disabled = false; }
     });
     navigator.serial.addEventListener('disconnect', (e) => {
-        if (port && e.target === port) {
+        if (port && e.target === port && !flashedDone) {
             logWarn('Device disconnected.');
             if (!busy) ui.flashStatus.textContent = 'Device disconnected.';
         }
