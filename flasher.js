@@ -3,7 +3,7 @@
  * minimums, pick a board tier, write firmware@0x0 + LittleFS image at the
  * tier's VFS offset in one writeFlash pass.
  */
-import { ESPLoader, Transport, HardReset } from './vendor/esptool-js-0.7.0.js';
+import { ESPLoader, Transport } from './vendor/esptool-js-0.7.0.js';
 
 /* Compact MD5 (Uint8Array → hex) — feeds writeFlash's calculateMD5Hash so the
  * ROM's own flash_md5sum can verify each written image on-device. */
@@ -367,12 +367,19 @@ async function doFlash() {
         setProgress('All images written & verified', 96);
         logOk(appOnly ? 'Filesystem written.' : 'Flash complete. Firmware + filesystem written.');
 
-        // --after: hard_reset except GEEK (no reset button — power cycle only)
+        // --after hard_reset: pulse EN (RTS) low with IO0 high so the board
+        // boots the app — this is what esptool's hard_reset does. esptool-js's
+        // own HardReset class only *deasserts* RTS (never asserts it first),
+        // which is a no-op and left the chip sitting in the stub.
         if (tier !== 'geek-16mb') {
             try {
-                const otg = typeof loader.usesUsbOtg === 'function' ? await loader.usesUsbOtg() : false;
-                await new HardReset(transport, otg).reset();
-            } catch (e) { /* the power-cycle instruction covers non-resettable boards */ }
+                await transport.setSignals(false, true);      // RTS asserted → EN low, IO0 high
+                await new Promise((r) => setTimeout(r, 200));
+                await transport.setSignals(false, false);     // EN released → boots into app
+                logDim('Reset pulse sent — board should reboot into TerraLync Lite.');
+            } catch (e) {
+                logWarn('Auto-reset failed — unplug and replug the board.');
+            }
         }
         await teardownLoader();
         setProgress('Done', 100);
