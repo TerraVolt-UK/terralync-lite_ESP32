@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Flash TerraLync Lite to your ESP32-S3 directly from Chrome or Edge — no installs, no drivers to hunt down.">
-    <title>Web Flasher (Beta) — TerraLync</title>
+    <title>Web Flasher — TerraLync</title>
 
     <link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32x32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="images/favicon-16x16.png">
@@ -25,16 +25,6 @@
 
     <style>
         /* ----- Web-flasher specific bits (design-system classes live in styles.css) ----- */
-        .beta-banner {
-            display: flex; align-items: center; gap: 0.75rem;
-            background: linear-gradient(90deg, rgba(245,158,11,0.14), rgba(245,158,11,0.04));
-            border: 1px solid rgba(245,158,11,0.4);
-            border-radius: 12px; padding: 0.8rem 1.1rem;
-            font-size: 0.92rem; color: var(--text-2);
-        }
-        .beta-banner i { color: var(--amber); font-size: 1.1rem; }
-        .beta-banner .tag { flex-shrink: 0; }
-
         .steps { display: flex; gap: 1rem; margin: 1.5rem 0 2rem; flex-wrap: wrap; }
         .step-chip {
             display: flex; align-items: center; gap: 0.55rem;
@@ -145,7 +135,7 @@
             <img src="images/heroes/circuit.jpg" alt="" aria-hidden="true">
         </div>
         <div class="hero-inner">
-            <span class="eyebrow"><i class="fas fa-bolt"></i> Web flasher &nbsp;<span class="tag" style="vertical-align:middle;"><i class="fas fa-flask"></i> Beta</span></span>
+            <span class="eyebrow"><i class="fas fa-bolt"></i> Web flasher</span>
             <h1>Flash <span class="text-gradient">TerraLync Lite</span><br>straight from your browser</h1>
             <p class="hero-subtitle">
                 Plug in your ESP32-S3, click connect — we detect the board, pick the right
@@ -157,13 +147,6 @@
     <!-- ===================== FLASHER ===================== -->
     <section class="section-sm" id="flasher">
         <div class="container-narrow">
-
-            <div class="beta-banner reveal">
-                <span class="tag"><i class="fas fa-flask"></i> Beta</span>
-                <span>This is a new, experimental install route. If anything misbehaves, use the
-                <a href="https://terralync.terravolt.co.uk/pages/downloads.html">Windows flasher</a>
-                and let us know what happened.</span>
-            </div>
 
             <div id="unsupported" class="callout warn reveal hidden" style="margin-top:1rem;">
                 <i class="fas fa-triangle-exclamation"></i>
@@ -296,7 +279,7 @@
                             copy the log below and send it to us.</p>
                         <p style="margin:0;"><strong><i class="fas fa-download" style="color:var(--emerald-bright); margin-right:0.4rem;"></i>Still stuck?</strong>
                             The <a href="https://terralync.terravolt.co.uk/pages/downloads.html">Windows flasher (.exe)</a>
-                            is the fully-tested path — or check the
+                            is a solid fallback — or check the
                             <a href="https://terralync.terravolt.co.uk/pages/help.html">install guide</a>.</p>
                     </div>
                 </details>
@@ -315,7 +298,7 @@
     <footer>
         <div class="container">
             <div class="footer-bottom" style="justify-content:center; text-align:center;">
-                <span>&copy; 2026 TerraLync — a TerraVolt UK product. Web flasher is beta; firmware served from GitHub Releases.</span>
+                <span>&copy; 2026 TerraLync — a TerraVolt UK product. Firmware served from GitHub Releases.</span>
             </div>
         </div>
     </footer>
